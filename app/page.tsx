@@ -1,68 +1,935 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-  Bell, BookOpen, CalendarDays, CheckCircle2, ChevronDown, CircleHelp,
-  Clock3, FolderKanban, LayoutDashboard, LogOut, Menu, MessageSquare,
-  MoreHorizontal, Plus, Search, Settings, Sparkles, Target, Users, X,
-} from 'lucide-react'
+Activity,
+Bell,
+BookOpen,
+CalendarDays,
+CheckCircle2,
+ChevronDown,
+CircleHelp,
+Clock,
+FolderKanban,
+LayoutDashboard,
+LogOut,
+Menu,
+Plus,
+Search,
+Settings,
+Sparkles,
+Users,
+X,
+} from "lucide-react";
+
+type UserRole = "student" | "faculty" | "admin";
+
+type CurrentUser = {
+id: string;
+name: string;
+email: string;
+role: UserRole;
+};
+
+type Project = {
+_id: string;
+title: string;
+description: string;
+category: string;
+status: string;
+deadline: string;
+githubUrl?: string;
+createdAt?: string;
+};
 
 const navItems = [
-  { label: 'Overview', icon: LayoutDashboard },
-  { label: 'Projects', icon: FolderKanban },
-  { label: 'Tasks', icon: CheckCircle2, count: '6' },
-  { label: 'Milestones', icon: Target },
-  { label: 'Notifications', icon: Bell, count: '3' },
-]
+{ label: "Overview", icon: LayoutDashboard },
+{ label: "My Projects", icon: FolderKanban },
+{ label: "My Tasks", icon: CheckCircle2 },
+{ label: "Team", icon: Users },
+];
 
-const projects = [
-  { name: 'Campus Connect', type: 'Web application', progress: 78, color: 'indigo', members: 4, deadline: 'Oct 24' },
-  { name: 'EcoTrack Mobile', type: 'Mobile application', progress: 46, color: 'teal', members: 3, deadline: 'Nov 08' },
-  { name: 'Study Buddy AI', type: 'Research project', progress: 32, color: 'amber', members: 5, deadline: 'Dec 02' },
-]
+const categories = [
+"Web Development",
+"AI/ML",
+"Data Science",
+"Mobile App",
+"Other",
+];
 
-const activities = [
-  { icon: CheckCircle2, title: 'You completed “API integration”', detail: 'Campus Connect · 12 min ago', tone: 'green' },
-  { icon: MessageSquare, title: 'Dr. Williams left feedback', detail: 'EcoTrack Mobile · 1 hr ago', tone: 'purple' },
-  { icon: Users, title: 'Maya joined your project', detail: 'Study Buddy AI · 3 hrs ago', tone: 'orange' },
-]
+function Sidebar({
+active,
+setActive,
+open,
+setOpen,
+user,
+onLogout,
+loggingOut,
+}: {
+active: string;
+setActive: (value: string) => void;
+open: boolean;
+setOpen: (value: boolean) => void;
+user: CurrentUser;
+onLogout: () => void;
+loggingOut: boolean;
+}) {
+const initials = user.name
+.trim()
+.split(/\s+/)
+.map((part) => part[0])
+.join("")
+.slice(0, 2)
+.toUpperCase();
 
-function ProgressRing({ value }: { value: number }) {
-  return <div className="progress-ring" style={{ '--progress': `${value * 3.6}deg` } as React.CSSProperties}><span>{value}%</span></div>
+return (
+<>
+{open && (
+<button
+className="sidebar-overlay"
+onClick={() => setOpen(false)}
+aria-label="Close navigation"
+/>
+)}
+
+
+  <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
+    <div className="brand">
+      <div className="brand-mark">
+        <Sparkles size={17} />
+      </div>
+
+      <span>
+        Project<span className="brand-accent">Sphere</span>
+      </span>
+
+      <button
+        className="mobile-close"
+        onClick={() => setOpen(false)}
+        aria-label="Close menu"
+      >
+        <X size={18} />
+      </button>
+    </div>
+
+    <div className="workspace">
+      <div className="workspace-avatar">CS</div>
+
+      <div>
+        <strong>Computer Science</strong>
+        <small>Academic Workspace</small>
+      </div>
+
+      <ChevronDown size={15} className="muted-icon" />
+    </div>
+
+    <nav className="nav-list" aria-label="Main navigation">
+      <span className="nav-label">Workspace</span>
+
+      {navItems.map(({ label, icon: Icon }) => (
+        <button
+          key={label}
+          className={`nav-item ${
+            active === label ? "nav-active" : ""
+          }`}
+          onClick={() => {
+            setActive(label);
+            setOpen(false);
+          }}
+        >
+          <Icon size={18} strokeWidth={1.8} />
+          <span>{label}</span>
+        </button>
+      ))}
+
+      <span className="nav-label nav-label-spaced">Personal</span>
+
+      <button
+        className={`nav-item ${
+          active === "Calendar" ? "nav-active" : ""
+        }`}
+        onClick={() => {
+          setActive("Calendar");
+          setOpen(false);
+        }}
+      >
+        <CalendarDays size={18} />
+        <span>Calendar</span>
+      </button>
+
+      <button
+        className={`nav-item ${
+          active === "Resources" ? "nav-active" : ""
+        }`}
+        onClick={() => {
+          setActive("Resources");
+          setOpen(false);
+        }}
+      >
+        <BookOpen size={18} />
+        <span>Resources</span>
+      </button>
+    </nav>
+
+    <div className="sidebar-bottom">
+      <button className="nav-item">
+        <CircleHelp size={18} />
+        <span>Help center</span>
+      </button>
+
+      <button className="nav-item">
+        <Settings size={18} />
+        <span>Settings</span>
+      </button>
+
+      <div className="profile">
+        <div className="profile-avatar">{initials}</div>
+
+        <div className="profile-details">
+          <strong>{user.name}</strong>
+          <small>{user.role}</small>
+        </div>
+
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={onLogout}
+          disabled={loggingOut}
+          aria-label="Log out"
+          title="Log out"
+        >
+          <LogOut size={18} />
+        </button>
+      </div>
+    </div>
+  </aside>
+</>
+
+
+);
 }
 
-function Sidebar({ active, setActive, open, setOpen }: { active: string; setActive: (value: string) => void; open: boolean; setOpen: (value: boolean) => void }) {
-  return <>
-    {open && <button aria-label="Close menu" className="sidebar-overlay" onClick={() => setOpen(false)} />}
-    <aside className={`sidebar ${open ? 'sidebar-open' : ''}`}>
-      <div className="brand"><div className="brand-mark"><Sparkles size={17} /></div><span>Project<span className="brand-accent">Sphere</span></span><button className="mobile-close" onClick={() => setOpen(false)}><X size={18} /></button></div>
-      <div className="workspace"><div className="workspace-avatar">CS</div><div><strong>Computer Science</strong><small>2024 · Semester 2</small></div><ChevronDown size={15} className="muted-icon" /></div>
-      <nav className="nav-list" aria-label="Main navigation">
-        <span className="nav-label">Workspace</span>
-        {navItems.map(({ label, icon: Icon, count }) => <button key={label} className={`nav-item ${active === label ? 'nav-active' : ''}`} onClick={() => { setActive(label); setOpen(false) }}><Icon size={18} strokeWidth={1.8} /><span>{label}</span>{count && <b>{count}</b>}</button>)}
-        <span className="nav-label nav-label-spaced">Personal</span>
-        <button className="nav-item"><CalendarDays size={18} strokeWidth={1.8} /><span>Calendar</span></button>
-        <button className="nav-item"><BookOpen size={18} strokeWidth={1.8} /><span>Resources</span></button>
-      </nav>
-      <div className="sidebar-bottom"><button className="nav-item"><CircleHelp size={18} /><span>Help center</span></button><button className="nav-item"><Settings size={18} /><span>Settings</span></button><div className="profile"><div className="profile-avatar">AM</div><div><strong>Alex Morgan</strong><small>Student</small></div><MoreHorizontal size={18} className="muted-icon" /></div></div>
-    </aside>
-  </>
+function CreateProjectModal({
+onClose,
+onCreated,
+}: {
+onClose: () => void;
+onCreated: () => void;
+}) {
+const [title, setTitle] = useState("");
+const [description, setDescription] = useState("");
+const [category, setCategory] = useState("AI/ML");
+const [deadline, setDeadline] = useState("");
+const [githubUrl, setGithubUrl] = useState("");
+const [saving, setSaving] = useState(false);
+const [error, setError] = useState("");
+
+async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+event.preventDefault();
+setSaving(true);
+setError("");
+
+try {
+  const response = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({
+      title,
+      description,
+      category,
+      deadline,
+      githubUrl,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    setError(data.message || "Unable to create project.");
+    return;
+  }
+
+  onCreated();
+  onClose();
+} catch {
+  setError("Unable to connect to the server. Please try again.");
+} finally {
+  setSaving(false);
 }
 
-function Dashboard() {
-  return <div className="dashboard-content">
-    <section className="welcome-row"><div><p className="eyebrow">MONDAY, OCTOBER 19, 2026</p><h1>Good morning, Alex <span aria-hidden="true">✦</span></h1><p className="subtitle">Here&apos;s what&apos;s happening across your projects.</p></div><button className="primary-btn"><Plus size={17} /> New project</button></section>
-    <div className="demo-notice"><Sparkles size={16} /><span><strong>Prototype workspace</strong> · You&apos;re viewing sample data for demonstration purposes.</span><button aria-label="Dismiss notice"><X size={15} /></button></div>
-    <section className="stats-grid"><div className="stat-card"><div className="stat-icon indigo-bg"><FolderKanban size={18} /></div><div><span>Active projects</span><strong>3</strong><small className="stat-positive">+1 this semester</small></div></div><div className="stat-card"><div className="stat-icon orange-bg"><Clock3 size={18} /></div><div><span>Pending tasks</span><strong>6</strong><small>2 due this week</small></div></div><div className="stat-card"><div className="stat-icon teal-bg"><Target size={18} /></div><div><span>Avg. completion</span><strong>52%</strong><small className="stat-positive">+8% vs. last month</small></div></div><div className="stat-card"><div className="stat-icon rose-bg"><Bell size={18} /></div><div><span>Unread updates</span><strong>3</strong><small>From faculty &amp; peers</small></div></div></section>
-    <div className="section-heading"><div><h2>Active projects</h2><p>Keep your capstone work moving forward.</p></div><button className="text-btn">View all <span>→</span></button></div>
-    <section className="project-grid">{projects.map((project) => <article className="project-card" key={project.name}><div className="project-top"><div className={`project-logo ${project.color}`}><FolderKanban size={19} /></div><button className="icon-btn" aria-label={`More options for ${project.name}`}><MoreHorizontal size={19} /></button></div><h3>{project.name}</h3><p className="project-type">{project.type}</p><div className="project-meta"><span><Users size={14} /> {project.members} members</span><span><CalendarDays size={14} /> {project.deadline}</span></div><div className="progress-line"><span style={{ width: `${project.progress}%` }} className={project.color} /></div><div className="progress-label"><span>Progress</span><strong>{project.progress}%</strong></div></article>)}</section>
-    <section className="lower-grid"><article className="panel completion-panel"><div className="panel-heading"><div><h2>Project completion</h2><p>Progress across your active work</p></div><button className="select-btn">This semester <ChevronDown size={14} /></button></div><div className="chart-area"><div className="chart-y"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div><div className="chart"><div className="grid-lines"><i /><i /><i /><i /><i /></div><svg viewBox="0 0 600 170" preserveAspectRatio="none" aria-label="Project completion trend chart"><defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#6657d9" stopOpacity=".22" /><stop offset="100%" stopColor="#6657d9" stopOpacity="0" /></linearGradient></defs><path d="M0 146 C45 139, 70 145, 105 121 S160 110, 195 116 S240 94, 280 91 S330 104, 360 80 S400 75, 440 58 S485 63, 520 39 S565 28, 600 22 L600 170 L0 170Z" fill="url(#chartFill)" /><path d="M0 146 C45 139, 70 145, 105 121 S160 110, 195 116 S240 94, 280 91 S330 104, 360 80 S400 75, 440 58 S485 63, 520 39 S565 28, 600 22" fill="none" stroke="#6657d9" strokeWidth="3" strokeLinecap="round" /></svg><div className="chart-x"><span>Sep 01</span><span>Sep 15</span><span>Oct 01</span><span>Oct 15</span><span>Oct 30</span></div></div></div></article><article className="panel"><div className="panel-heading"><div><h2>Upcoming deadlines</h2><p>Stay ahead of what&apos;s next.</p></div><button className="icon-btn"><MoreHorizontal size={19} /></button></div><div className="deadline-list"><div className="deadline-item"><div className="date-box"><strong>24</strong><span>OCT</span></div><div><strong>Final UI prototype</strong><small>Campus Connect · in 5 days</small></div><span className="priority high">High</span></div><div className="deadline-item"><div className="date-box"><strong>28</strong><span>OCT</span></div><div><strong>Research methodology</strong><small>Study Buddy AI · in 9 days</small></div><span className="priority medium">Medium</span></div><div className="deadline-item"><div className="date-box"><strong>08</strong><span>NOV</span></div><div><strong>Beta release</strong><small>EcoTrack Mobile · in 20 days</small></div><span className="priority low">Low</span></div></div></article></section>
-    <section className="bottom-grid"><article className="panel"><div className="panel-heading"><div><h2>Recent activity</h2><p>Latest updates from your workspace.</p></div><button className="text-btn">See all <span>→</span></button></div><div className="activity-list">{activities.map(({ icon: Icon, title, detail, tone }) => <div className="activity" key={title}><div className={`activity-icon ${tone}`}><Icon size={16} /></div><div><strong>{title}</strong><small>{detail}</small></div><button className="icon-btn"><MoreHorizontal size={17} /></button></div>)}</div></article><article className="tip-card"><div className="tip-glow" /><Sparkles size={20} className="tip-spark" /><p className="eyebrow">CAPSTONE TIP</p><h2>Small steps make big progress.</h2><p>Break your next milestone into smaller tasks to keep momentum and make progress visible to your team.</p><button className="tip-btn">Explore task planning <span>→</span></button></article></section>
-  </div>
+}
+
+return (
+<div
+className="modal-backdrop"
+onMouseDown={(event) => {
+if (event.target === event.currentTarget && !saving) {
+onClose();
+}
+}}
+> <section
+     className="project-modal"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="create-project-title"
+   > <div className="modal-heading"> <div> <span className="eyebrow"> <Sparkles size={14} /> PROJECT WORKSPACE </span> <h2 id="create-project-title">Create a project</h2> <p>Start planning your next academic project.</p> </div>
+
+
+      <button
+        type="button"
+        className="icon-btn"
+        onClick={onClose}
+        disabled={saving}
+        aria-label="Close form"
+      >
+        <X size={20} />
+      </button>
+    </div>
+
+    <form onSubmit={handleSubmit} className="project-form">
+      <label>
+        Project title
+        <input
+          type="text"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="e.g. AI-Powered Attendance System"
+          minLength={3}
+          maxLength={100}
+          required
+        />
+      </label>
+
+      <label>
+        Description
+        <textarea
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="Describe your project, its goals, and its features..."
+          maxLength={2000}
+          rows={4}
+          required
+        />
+      </label>
+
+      <label>
+        Category
+        <select
+          value={category}
+          onChange={(event) => setCategory(event.target.value)}
+          required
+        >
+          {categories.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        Project deadline
+        <input
+          type="date"
+          value={deadline}
+          onChange={(event) => setDeadline(event.target.value)}
+          required
+        />
+      </label>
+
+      <label>
+        GitHub repository URL <span>(optional)</span>
+        <input
+          type="url"
+          value={githubUrl}
+          onChange={(event) => setGithubUrl(event.target.value)}
+          placeholder="https://github.com/username/repository"
+        />
+      </label>
+
+      {error && (
+        <p className="auth-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="modal-actions">
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={onClose}
+          disabled={saving}
+        >
+          Cancel
+        </button>
+
+        <button
+          type="submit"
+          className="primary-button"
+          disabled={saving}
+        >
+          <Plus size={17} />
+          {saving ? "Creating..." : "Create Project"}
+        </button>
+      </div>
+    </form>
+  </section>
+</div>
+
+
+);
+}
+
+function Dashboard({
+user,
+projects,
+projectsLoading,
+projectsError,
+onCreateProject,
+onRetry,
+}: {
+user: CurrentUser;
+projects: Project[];
+projectsLoading: boolean;
+projectsError: string;
+onCreateProject: () => void;
+onRetry: () => void;
+}) {
+const firstName = user.name.trim().split(/\s+/)[0];
+
+const pendingProjects = projects.filter(
+(project) => project.status === "Pending"
+).length;
+
+const activeProjects = projects.filter(
+(project) =>
+project.status === "In Progress" || project.status === "Approved"
+).length;
+
+function formatDate(value: string) {
+const date = new Date(value);
+
+
+if (Number.isNaN(date.getTime())) return "Date unavailable";
+
+return date.toLocaleDateString("en-IN", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+
+}
+
+return (
+<> <section className="welcome-section"> <div> <span className="eyebrow"> <Sparkles size={14} /> YOUR WORKSPACE </span>
+
+      <h1>
+        Welcome back, {firstName} <span aria-hidden="true">✦</span>
+      </h1>
+
+      <p className="auth-description">
+        Here&apos;s what&apos;s happening with your academic projects.
+      </p>
+    </div>
+
+    <button className="primary-button" onClick={onCreateProject}>
+      <Plus size={17} />
+      New Project
+    </button>
+  </section>
+
+  <section className="stats-grid" aria-label="Project statistics">
+    <article className="stat-card">
+      <div className="stat-icon">
+        <FolderKanban size={20} />
+      </div>
+      <span>Active Projects</span>
+      <strong>{projectsLoading ? "—" : activeProjects}</strong>
+      <small>Approved or in-progress projects</small>
+    </article>
+
+    <article className="stat-card">
+      <div className="stat-icon">
+        <CheckCircle2 size={20} />
+      </div>
+      <span>Completed Projects</span>
+      <strong>
+        {projectsLoading
+          ? "—"
+          : projects.filter((project) => project.status === "Completed")
+              .length}
+      </strong>
+      <small>Projects marked as completed</small>
+    </article>
+
+    <article className="stat-card">
+      <div className="stat-icon">
+        <Clock size={20} />
+      </div>
+      <span>Pending Approval</span>
+      <strong>{projectsLoading ? "—" : pendingProjects}</strong>
+      <small>Projects awaiting review</small>
+    </article>
+
+    <article className="stat-card">
+      <div className="stat-icon">
+        <Activity size={20} />
+      </div>
+      <span>Your Role</span>
+      <strong className="role-value">
+        {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+      </strong>
+      <small>ProjectSphere account</small>
+    </article>
+  </section>
+
+  <section className="dashboard-section">
+    <div className="section-heading">
+      <div>
+        <h2>My Projects</h2>
+        <p>Your academic projects in one place.</p>
+      </div>
+
+      <button
+        className="text-button"
+        onClick={onCreateProject}
+      >
+        <Plus size={16} /> New project
+      </button>
+    </div>
+
+    {projectsError && (
+      <div className="empty-state">
+        <p>{projectsError}</p>
+        <button className="secondary-button" onClick={onRetry}>
+          Try again
+        </button>
+      </div>
+    )}
+
+    {projectsLoading && !projectsError && (
+      <div className="empty-state">
+        <p>Loading your projects...</p>
+      </div>
+    )}
+
+    {!projectsLoading && !projectsError && projects.length === 0 && (
+      <div className="empty-state">
+        <div className="empty-icon">
+          <FolderKanban size={28} />
+        </div>
+
+        <h3>No projects yet</h3>
+
+        <p>
+          Create your first academic project to start tracking your work.
+        </p>
+
+        <button className="primary-button" onClick={onCreateProject}>
+          <Plus size={17} />
+          Create your first project
+        </button>
+      </div>
+    )}
+
+    {!projectsLoading && !projectsError && projects.length > 0 && (
+      <div className="projects-grid">
+        {projects.map((project) => (
+          <article className="project-card" key={project._id}>
+            <div className="project-card-top">
+              <div className="project-card-icon">
+                <FolderKanban size={21} />
+              </div>
+
+              <span
+                className={`project-status status-${project.status
+                  .toLowerCase()
+                  .replace(/\s+/g, "-")}`}
+              >
+                {project.status}
+              </span>
+            </div>
+
+            <h3>{project.title}</h3>
+
+            <p className="project-description">
+              {project.description}
+            </p>
+
+            <div className="project-meta">
+              <span>{project.category}</span>
+              <span>
+                <CalendarDays size={15} />
+                {formatDate(project.deadline)}
+              </span>
+            </div>
+
+            {project.githubUrl && (
+              <a
+                className="text-button project-github"
+                href={project.githubUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View GitHub repository ↗
+              </a>
+            )}
+          </article>
+        ))}
+      </div>
+    )}
+  </section>
+
+  <section className="dashboard-section">
+    <div className="section-heading">
+      <div>
+        <h2>Upcoming Tasks</h2>
+        <p>Keep track of your next deadlines.</p>
+      </div>
+    </div>
+
+    <div className="empty-state compact-empty">
+      <CheckCircle2 size={25} />
+      <p>Task management is coming next.</p>
+    </div>
+  </section>
+</>
+
+
+);
 }
 
 export default function Page() {
-  const [active, setActive] = useState('Overview')
-  const [open, setOpen] = useState(false)
-  return <div className="app-shell"><Sidebar active={active} setActive={setActive} open={open} setOpen={setOpen} /><main className="main"><header className="topbar"><button className="menu-btn" onClick={() => setOpen(true)} aria-label="Open navigation"><Menu size={21} /></button><div className="breadcrumbs"><span>Workspace</span><span>/</span><strong>{active}</strong></div><div className="top-actions"><button className="search-btn"><Search size={18} /><span>Search anything...</span><kbd>⌘ K</kbd></button><button className="top-icon" aria-label="Notifications"><Bell size={19} /><i /></button><div className="top-avatar">AM</div></div></header><div className="page-wrap">{active === 'Overview' ? <Dashboard /> : <div className="empty-view"><div className="empty-icon"><FolderKanban size={28} /></div><h1>{active}</h1><p>This area is ready for your {active.toLowerCase()} workflow. Connect it to the Express.js backend when you&apos;re ready.</p><span className="sample-pill"><Sparkles size={14} /> Frontend prototype</span></div>}</div></main></div>
+const [active, setActive] = useState("Overview");
+const [open, setOpen] = useState(false);
+const [user, setUser] = useState<CurrentUser | null>(null);
+const [checkingAuth, setCheckingAuth] = useState(true);
+const [loggingOut, setLoggingOut] = useState(false);
+const [authError, setAuthError] = useState("");
+
+const [projects, setProjects] = useState<Project[]>([]);
+const [projectsLoading, setProjectsLoading] = useState(true);
+const [projectsError, setProjectsError] = useState("");
+const [showCreateForm, setShowCreateForm] = useState(false);
+
+const router = useRouter();
+
+async function loadProjects() {
+setProjectsLoading(true);
+setProjectsError("");
+
+try {
+  const response = await fetch("/api/projects", {
+    method: "GET",
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    setProjectsError(data.message || "Unable to load projects.");
+    return;
+  }
+
+  setProjects(Array.isArray(data.projects) ? data.projects : []);
+} catch {
+  setProjectsError("Unable to connect to the server. Please try again.");
+} finally {
+  setProjectsLoading(false);
+}
+
+
+}
+
+useEffect(() => {
+let cancelled = false;
+
+
+async function loadUser() {
+  try {
+    const response = await fetch("/api/auth/me", {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+
+    if (!response.ok) {
+      router.replace("/login");
+      return;
+    }
+
+    const data = await response.json();
+
+    if (!data.user) {
+      router.replace("/login");
+      return;
+    }
+
+    if (!cancelled) {
+      setUser(data.user as CurrentUser);
+    }
+  } catch {
+    if (!cancelled) {
+      setAuthError("Unable to verify your session. Please try again.");
+    }
+  } finally {
+    if (!cancelled) {
+      setCheckingAuth(false);
+    }
+  }
+}
+
+loadUser();
+
+return () => {
+  cancelled = true;
+};
+
+
+}, [router]);
+
+useEffect(() => {
+if (user) {
+loadProjects();
+}
+}, [user]);
+
+async function handleLogout() {
+setLoggingOut(true);
+setAuthError("");
+
+try {
+  const response = await fetch("/api/auth/logout", {
+    method: "POST",
+    credentials: "same-origin",
+  });
+
+  if (!response.ok) {
+    setAuthError("Logout failed. Please try again.");
+    setLoggingOut(false);
+    return;
+  }
+
+  router.replace("/login");
+  router.refresh();
+} catch {
+  setAuthError("Unable to log out. Please try again.");
+  setLoggingOut(false);
+}
+
+
+}
+
+if (checkingAuth) {
+return ( <main className="auth-page"> <section className="auth-card"> <div className="auth-brand">
+Project<span>Sphere</span> </div> <p className="auth-description">Loading your workspace...</p> </section> </main>
+);
+}
+
+if (!user) {
+return ( <main className="auth-page"> <section className="auth-card"> <h1>Session unavailable</h1> <p className="auth-description">
+{authError || "Redirecting you to login..."} </p> <Link href="/login" className="auth-submit">
+Go to login </Link> </section> </main>
+);
+}
+
+return ( <div className="app-shell"> <Sidebar
+     active={active}
+     setActive={setActive}
+     open={open}
+     setOpen={setOpen}
+     user={user}
+     onLogout={handleLogout}
+     loggingOut={loggingOut}
+   />
+
+
+  <main className="main">
+    <header className="topbar">
+      <button
+        className="menu-btn"
+        onClick={() => setOpen(true)}
+        aria-label="Open navigation"
+      >
+        <Menu size={21} />
+      </button>
+
+      <div className="breadcrumbs">
+        <span>Workspace</span>
+        <span>/</span>
+        <strong>{active}</strong>
+      </div>
+
+      <div className="top-actions">
+        <button className="search-btn">
+          <Search size={18} />
+          <span>Search anything...</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+
+        <button className="top-icon" aria-label="Notifications">
+          <Bell size={19} />
+        </button>
+
+        <div className="top-avatar">
+          {user.name
+            .trim()
+            .split(/\s+/)
+            .map((part) => part[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase()}
+        </div>
+      </div>
+    </header>
+
+    <div className="page-wrap">
+      {authError && (
+        <div className="auth-error" role="alert">
+          {authError}
+        </div>
+      )}
+
+      {active === "Overview" || active === "My Projects" ? (
+        <>
+          {active === "Overview" && (
+            <Dashboard
+              user={user}
+              projects={projects}
+              projectsLoading={projectsLoading}
+              projectsError={projectsError}
+              onCreateProject={() => setShowCreateForm(true)}
+              onRetry={loadProjects}
+            />
+          )}
+
+          {active === "My Projects" && (
+            <section className="dashboard-section">
+              <div className="section-heading">
+                <div>
+                  <h2>My Projects</h2>
+                  <p>All your saved academic projects.</p>
+                </div>
+
+                <button
+                  className="primary-button"
+                  onClick={() => setShowCreateForm(true)}
+                >
+                  <Plus size={17} />
+                  New Project
+                </button>
+              </div>
+
+              {projectsLoading && <p>Loading your projects...</p>}
+
+              {projectsError && (
+                <div className="empty-state">
+                  <p>{projectsError}</p>
+                  <button
+                    className="secondary-button"
+                    onClick={loadProjects}
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+
+              {!projectsLoading &&
+                !projectsError &&
+                projects.length === 0 && (
+                  <div className="empty-state">
+                    <FolderKanban size={28} />
+                    <h3>No projects yet</h3>
+                    <p>Create your first project to get started.</p>
+                    <button
+                      className="primary-button"
+                      onClick={() => setShowCreateForm(true)}
+                    >
+                      <Plus size={17} />
+                      Create Project
+                    </button>
+                  </div>
+                )}
+
+              {!projectsLoading &&
+                !projectsError &&
+                projects.length > 0 && (
+                  <div className="projects-grid">
+                    {projects.map((project) => (
+                      <article
+                        className="project-card"
+                        key={project._id}
+                      >
+                        <div className="project-card-top">
+                          <div className="project-card-icon">
+                            <FolderKanban size={21} />
+                          </div>
+                          <span
+                            className={`project-status status-${project.status
+                              .toLowerCase()
+                              .replace(/\s+/g, "-")}`}
+                          >
+                            {project.status}
+                          </span>
+                        </div>
+
+                        <h3>{project.title}</h3>
+                        <p className="project-description">
+                          {project.description}
+                        </p>
+
+                        <div className="project-meta">
+                          <span>{project.category}</span>
+                          <span>
+                            <CalendarDays size={15} />
+                            {new Date(
+                              project.deadline
+                            ).toLocaleDateString("en-IN")}
+                          </span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+            </section>
+          )}
+        </>
+      ) : (
+        <section className="empty-view">
+          <div className="empty-icon">
+            <FolderKanban size={28} />
+          </div>
+
+          <h1>{active}</h1>
+
+          <p>
+            The {active.toLowerCase()} workspace is ready for the next
+            development stage.
+          </p>
+
+          <span className="sample-pill">
+            <Sparkles size={14} /> ProjectSphere
+          </span>
+        </section>
+      )}
+    </div>
+  </main>
+
+  {showCreateForm && (
+    <CreateProjectModal
+      onClose={() => setShowCreateForm(false)}
+      onCreated={() => {
+        loadProjects();
+      }}
+    />
+  )}
+</div>
+
+
+);
 }
