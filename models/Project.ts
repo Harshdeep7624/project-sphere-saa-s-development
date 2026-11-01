@@ -58,7 +58,13 @@ githubUrl: {
 { timestamps: true }
 );
 
+// Supports listing a user's projects by creation date.
+ProjectSchema.index({ createdBy: 1, createdAt: -1 });
+
+// Supports filtering projects by status and sorting by creation date.
+ProjectSchema.index({ status: 1, createdAt: -1 });
+
 const Project =
-models.Project || model("Project", ProjectSchema);
+  models.Project || model("Project", ProjectSchema);
 
 export default Project;

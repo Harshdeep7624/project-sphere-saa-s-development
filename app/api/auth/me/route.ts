@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
@@ -6,9 +6,9 @@ import { getCurrentUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const authUser = await getCurrentUser();
+    const authUser = await getCurrentUser(request);
 
     if (!authUser) {
       return NextResponse.json(
