@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Project from "@/models/Project";
-import { getCurrentUser } from "@/lib/auth";
+import Team from "@/models/Team";
+import "@/models/User";
+import { verifyUserSession } from "@/lib/auth";
+import { recordAuditLog } from "@/lib/audit";
+import { notifyFacultyAndAdmins } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 
@@ -11,16 +16,15 @@ const MAX_LIMIT = 100;
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Authenticate via the shared helper (validates cookie, JWT, role, ObjectId)
-    const authUser = await getCurrentUser(request);
+    const { user, error: authError } = await verifyUserSession(request);
 
-    if (!authUser) {
+    if (authError || !user) {
       return NextResponse.json(
         {
           success: false,
-          message: "Please log in first.",
+          message: authError?.message || "Please log in first.",
         },
-        { status: 401 }
+        { status: authError?.status || 401 }
       );
     }
 
@@ -36,6 +40,7 @@ export async function POST(request: NextRequest) {
       category,
       deadline,
       githubUrl,
+      teamId,
     } = body;
 
     const allowedCategories = [
@@ -148,6 +153,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Optional team association verification
+    let validatedTeamId: mongoose.Types.ObjectId | null = null;
+    if (teamId && typeof teamId === "string" && mongoose.isValidObjectId(teamId)) {
+      const targetTeam = await Team.findOne({
+        _id: teamId,
+        $or: [{ owner: user.userId }, { "members.user": user.userId }],
+      });
+      if (targetTeam) {
+        validatedTeamId = targetTeam._id;
+      }
+    }
+
     // 5. Save the project to MongoDB, bound to the authenticated user
     const project = await Project.create({
       title: title.trim(),
@@ -155,8 +172,37 @@ export async function POST(request: NextRequest) {
       category,
       deadline: parsedDeadline,
       githubUrl: validatedGithubUrl,
-      createdBy: authUser.userId,
+      createdBy: user.userId,
+      teamId: validatedTeamId,
       // Status defaults to Pending in the Project model
+    });
+
+    if (validatedTeamId) {
+      await Team.findByIdAndUpdate(validatedTeamId, {
+        $addToSet: { projects: project._id },
+      });
+    }
+
+    // Reliably log audit and notify faculty/admins before returning response
+    await recordAuditLog(
+      {
+        id: user.userId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      "PROJECT_CREATED",
+      "Project",
+      project._id.toString(),
+      { title: project.title, category: project.category }
+    );
+
+    await notifyFacultyAndAdmins({
+      senderId: user.userId,
+      type: "PROJECT_SUBMITTED",
+      title: "New Project Submitted",
+      message: `${user.name} submitted a new project "${project.title}" for review.`,
+      link: "/?tab=review-queue",
     });
 
     // 6. Return the created project
@@ -204,13 +250,12 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate via the shared helper
-    const authUser = await getCurrentUser(request);
+    const { user, error: authError } = await verifyUserSession(request);
 
-    if (!authUser) {
+    if (authError || !user) {
       return NextResponse.json(
-        { success: false, message: "Please log in first." },
-        { status: 401 }
+        { success: false, message: authError?.message || "Please log in first." },
+        { status: authError?.status || 401 }
       );
     }
 
@@ -275,27 +320,42 @@ export async function GET(request: NextRequest) {
     // Connect to MongoDB
     await connectDB();
 
-    // Build filter query for search and filtering across all records
-    const filterQuery: Record<string, unknown> = { createdBy: authUser.userId };
+    // Check user team memberships to allow collaborative access to shared projects
+    const userTeams = await Team.find({
+      $or: [{ owner: user.userId }, { "members.user": user.userId }],
+    }).select("_id").lean();
+    const userTeamIds = userTeams.map((t) => t._id);
+
+    // Build filter query for search and filtering across all accessible records
+    const baseAccessFilter = userTeamIds.length > 0
+      ? { $or: [{ createdBy: user.userId }, { teamId: { $in: userTeamIds } }] }
+      : { createdBy: user.userId };
+
+    const andConditions: Record<string, unknown>[] = [baseAccessFilter];
 
     if (searchParam && searchParam.trim()) {
       const escaped = searchParam.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const regex = new RegExp(escaped, "i");
-      filterQuery.$or = [
-        { title: regex },
-        { description: regex },
-        { category: regex },
-        { status: regex },
-      ];
+      andConditions.push({
+        $or: [
+          { title: regex },
+          { description: regex },
+          { category: regex },
+          { status: regex },
+        ],
+      });
     }
 
     if (categoryParam && categoryParam.trim() && categoryParam !== "All categories") {
-      filterQuery.category = categoryParam.trim();
+      andConditions.push({ category: categoryParam.trim() });
     }
 
     if (statusParam && statusParam.trim() && statusParam !== "All statuses") {
-      filterQuery.status = statusParam.trim();
+      andConditions.push({ status: statusParam.trim() });
     }
+
+    const filterQuery: Record<string, unknown> =
+      andConditions.length === 1 ? baseAccessFilter : { $and: andConditions };
 
     const skip = (page - 1) * limit;
 
@@ -303,22 +363,25 @@ export async function GET(request: NextRequest) {
     const [total, projects, totalAll, activeCount, completedCount, pendingCount] = await Promise.all([
       Project.countDocuments(filterQuery),
       Project.find(filterQuery)
-        .select("title description category status deadline githubUrl createdAt")
+        .select("title description category status deadline githubUrl createdAt reviewNotes reviewedBy reviewedAt createdBy teamId")
+        .populate("reviewedBy", "name")
+        .populate("createdBy", "name email")
+        .populate("teamId", "name")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Project.countDocuments({ createdBy: authUser.userId }),
+      Project.countDocuments({ createdBy: user.userId }),
       Project.countDocuments({
-        createdBy: authUser.userId,
+        createdBy: user.userId,
         status: { $in: ["In Progress", "Approved"] },
       }),
       Project.countDocuments({
-        createdBy: authUser.userId,
+        createdBy: user.userId,
         status: "Completed",
       }),
       Project.countDocuments({
-        createdBy: authUser.userId,
+        createdBy: user.userId,
         status: "Pending",
       }),
     ]);

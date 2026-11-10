@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
-import { getCurrentUser, hasRole } from "@/lib/auth";
+import { verifyUserSession, hasRole } from "@/lib/auth";
 import connectDB from "@/lib/mongodb";
 import Project from "@/models/Project";
+import "@/models/User";
+import { recordAuditLog } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 
@@ -15,13 +18,13 @@ export async function PATCH(
   context: RouteContext
 ) {
   try {
-    // 1. Check authentication.
-    const user = await getCurrentUser(request);
+    // 1. Check authentication and account status
+    const { user, error: authError } = await verifyUserSession(request);
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json(
-        { success: false, message: "Please log in first." },
-        { status: 401 }
+        { success: false, message: authError?.message || "Please log in first." },
+        { status: authError?.status || 401 }
       );
     }
 
@@ -57,7 +60,8 @@ export async function PATCH(
       );
     }
 
-    const decision = (body as Record<string, unknown>)?.decision;
+    const bodyRecord = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+    const decision = bodyRecord.decision;
 
     if (!decision || !["Approved", "Rejected"].includes(decision as string)) {
       return NextResponse.json(
@@ -67,6 +71,27 @@ export async function PATCH(
         },
         { status: 400 }
       );
+    }
+
+    const rawNotes = bodyRecord.reviewNotes ?? bodyRecord.notes;
+    let reviewNotes = "";
+    if (rawNotes !== undefined && rawNotes !== null) {
+      if (typeof rawNotes !== "string") {
+        return NextResponse.json(
+          { success: false, message: "Review notes must be text." },
+          { status: 400 }
+        );
+      }
+      reviewNotes = rawNotes.trim();
+      if (reviewNotes.length > 1000) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Review notes cannot exceed 1000 characters.",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // 5. Connect to MongoDB.
@@ -79,13 +104,20 @@ export async function PATCH(
         status: "Pending",
       },
       {
-        $set: { status: decision },
+        $set: {
+          status: decision,
+          reviewNotes,
+          reviewedBy: user.userId,
+          reviewedAt: new Date(),
+        },
       },
       {
         returnDocument: "after",
         runValidators: true,
       }
-    ).lean();
+    )
+      .populate("reviewedBy", "name email")
+      .lean();
 
     if (!project) {
       const existingProject = await Project.exists({ _id: id });
@@ -106,6 +138,42 @@ export async function PATCH(
       );
     }
 
+    const reviewer =
+      project.reviewedBy && typeof project.reviewedBy === "object" && "_id" in project.reviewedBy
+        ? (project.reviewedBy as { _id?: unknown; name?: string; email?: string })
+        : null;
+
+    // Reliably record audit log and notify the project creator before returning response
+    await recordAuditLog(
+      {
+        id: user.userId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      "PROJECT_REVIEWED",
+      "Project",
+      project._id.toString(),
+      {
+        title: project.title,
+        decision,
+        reviewNotes: reviewNotes || "",
+      }
+    );
+
+    if (project.createdBy) {
+      await createNotification({
+        recipientId: project.createdBy,
+        senderId: user.userId,
+        type: decision === "Approved" ? "PROJECT_APPROVED" : "PROJECT_REJECTED",
+        title: `Project ${decision}`,
+        message: `Your project "${project.title}" has been ${String(decision).toLowerCase()}${
+          reviewNotes ? `: "${reviewNotes}"` : "."
+        }`,
+        link: "/?tab=projects",
+      });
+    }
+
     return NextResponse.json({
       success: true,
       message: `Project ${String(decision).toLowerCase()} successfully!`,
@@ -113,6 +181,17 @@ export async function PATCH(
         id: project._id.toString(),
         title: project.title,
         status: project.status,
+        reviewNotes: project.reviewNotes || "",
+        reviewedBy: reviewer
+          ? {
+              id: reviewer._id ? String(reviewer._id) : "",
+              name: reviewer.name || "",
+              email: reviewer.email || "",
+            }
+          : null,
+        reviewedAt: project.reviewedAt
+          ? new Date(project.reviewedAt).toISOString()
+          : null,
       },
     });
   } catch (error) {

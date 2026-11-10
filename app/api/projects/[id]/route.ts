@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Project from "@/models/Project";
-import { getCurrentUser } from "@/lib/auth";
+import "@/models/User";
+import "@/models/Team";
+import { verifyUserSession, hasRole } from "@/lib/auth";
+import { recordAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -30,23 +33,95 @@ function errorResponse(error: unknown) {
   );
 }
 
+// GET SINGLE PROJECT
+export async function GET(request: NextRequest, context: RouteContext) {
+  try {
+    const { user, error: authError } = await verifyUserSession(request);
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, message: authError?.message || "Please log in first." },
+        { status: authError?.status || 401 }
+      );
+    }
+
+    const { id } = await context.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid project ID." },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    const project = await Project.findById(id)
+      .populate("createdBy", "name email")
+      .populate("reviewedBy", "name email")
+      .populate("teamId", "name members owner")
+      .lean();
+
+    if (!project) {
+      return NextResponse.json(
+        { success: false, message: "Project not found." },
+        { status: 404 }
+      );
+    }
+
+    const ownerObj = project.createdBy as unknown as { _id?: unknown; name?: string; email?: string } | null;
+    const isCreator = ownerObj?._id?.toString() === user.userId || project.createdBy?.toString() === user.userId;
+
+    const teamObj = project.teamId as unknown as {
+      owner?: unknown;
+      members?: Array<{ user?: unknown }>;
+    } | null;
+
+    const isTeamOwner = teamObj?.owner
+      ? typeof teamObj.owner === "object" && teamObj.owner !== null && "_id" in teamObj.owner
+        ? (teamObj.owner as { _id: { toString(): string } })._id.toString() === user.userId
+        : teamObj.owner.toString() === user.userId
+      : false;
+
+    const isTeamMember = teamObj?.members
+      ? teamObj.members.some((m) => {
+          const mUserId = m.user as unknown as { _id?: unknown } | string;
+          return typeof mUserId === "object" && mUserId !== null && "_id" in mUserId
+            ? mUserId._id?.toString() === user.userId
+            : mUserId?.toString() === user.userId;
+        })
+      : false;
+
+    if (!isCreator && !isTeamMember && !isTeamOwner && !hasRole(user, ["faculty", "admin"])) {
+      return NextResponse.json(
+        { success: false, message: "You do not have permission to view this project." },
+        { status: 403 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      project,
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
 // UPDATE PROJECT
 export async function PATCH(
   request: NextRequest,
   context: RouteContext
 ) {
   try {
-    await connectDB();
+    const { user, error: authError } = await verifyUserSession(request);
 
-    // Authenticate via the shared helper (validates cookie, JWT, role, ObjectId)
-    const authUser = await getCurrentUser(request);
-
-    if (!authUser) {
+    if (authError || !user) {
       return NextResponse.json(
-        { success: false, message: "Please log in first." },
-        { status: 401 }
+        { success: false, message: authError?.message || "Please log in first." },
+        { status: authError?.status || 401 }
       );
     }
+
+    await connectDB();
 
     const { id } = await context.params;
 
@@ -65,6 +140,7 @@ export async function PATCH(
       "category",
       "deadline",
       "githubUrl",
+      "teamId",
     ];
 
     const suppliedFields = Object.keys(body);
@@ -196,17 +272,60 @@ export async function PATCH(
       updates.githubUrl = githubUrl;
     }
 
+    if ("teamId" in body) {
+      if (body.teamId === null || body.teamId === "") {
+        updates.teamId = null;
+      } else if (typeof body.teamId === "string") {
+        if (!mongoose.isValidObjectId(body.teamId)) {
+          return NextResponse.json(
+            { success: false, message: "Invalid team ID." },
+            { status: 400 }
+          );
+        }
+        const TeamModel = mongoose.models.Team;
+        const team = TeamModel ? await TeamModel.findById(body.teamId) : null;
+        if (!team) {
+          return NextResponse.json(
+            { success: false, message: "Team not found." },
+            { status: 404 }
+          );
+        }
+        const isTeamMember =
+          team.owner.toString() === user.userId ||
+          (team.members || []).some(
+            (m: { user: { toString(): string } }) => m.user.toString() === user.userId
+          );
+        if (!isTeamMember && !hasRole(user, ["admin"])) {
+          return NextResponse.json(
+            { success: false, message: "You are not a member of this team." },
+            { status: 403 }
+          );
+        }
+        updates.teamId = team._id;
+        const pOid = new mongoose.Types.ObjectId(id);
+        if (!(team.projects || []).some((p: { toString(): string }) => p.toString() === id)) {
+          team.projects.push(pOid);
+          await team.save();
+        }
+      } else {
+        return NextResponse.json(
+          { success: false, message: "teamId must be a string or null." },
+          { status: 400 }
+        );
+      }
+    }
+
     // Ownership enforced by matching both _id and createdBy
     const project = await Project.findOneAndUpdate(
-      { _id: id, createdBy: authUser.userId },
+      { _id: id, createdBy: user.userId },
       { $set: updates },
       {
         returnDocument: "after",
         runValidators: true,
       }
     ).select(
-      "title description category status deadline githubUrl createdAt"
-    );
+      "title description category status deadline githubUrl createdAt reviewNotes reviewedBy reviewedAt teamId"
+    ).populate("reviewedBy", "name").populate("teamId", "name");
 
     if (!project) {
       return NextResponse.json(
@@ -217,6 +336,20 @@ export async function PATCH(
         { status: 404 }
       );
     }
+
+    // Reliably record server-side audit log before returning response
+    await recordAuditLog(
+      {
+        id: user.userId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      "PROJECT_UPDATED",
+      "Project",
+      project._id.toString(),
+      { updatedFields: Object.keys(updates) }
+    );
 
     return NextResponse.json({
       success: true,
@@ -241,17 +374,16 @@ export async function DELETE(
   context: RouteContext
 ) {
   try {
-    await connectDB();
+    const { user, error: authError } = await verifyUserSession(request);
 
-    // Authenticate via the shared helper
-    const authUser = await getCurrentUser(request);
-
-    if (!authUser) {
+    if (authError || !user) {
       return NextResponse.json(
-        { success: false, message: "Please log in first." },
-        { status: 401 }
+        { success: false, message: authError?.message || "Please log in first." },
+        { status: authError?.status || 401 }
       );
     }
+
+    await connectDB();
 
     const { id } = await context.params;
 
@@ -265,7 +397,7 @@ export async function DELETE(
     // Ownership enforced by matching both _id and createdBy
     const project = await Project.findOneAndDelete({
       _id: id,
-      createdBy: authUser.userId,
+      createdBy: user.userId,
     });
 
     if (!project) {
@@ -277,6 +409,29 @@ export async function DELETE(
         { status: 404 }
       );
     }
+
+    // Clean up project reference from any teams
+    const TeamModel = mongoose.models.Team;
+    if (TeamModel) {
+      await TeamModel.updateMany(
+        { projects: project._id },
+        { $pull: { projects: project._id } }
+      );
+    }
+
+    // Reliably record server-side audit log before returning response
+    await recordAuditLog(
+      {
+        id: user.userId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      "PROJECT_DELETED",
+      "Project",
+      project._id.toString(),
+      { title: project.title }
+    );
 
     return NextResponse.json({
       success: true,

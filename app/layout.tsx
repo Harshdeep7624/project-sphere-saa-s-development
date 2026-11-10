@@ -3,9 +3,23 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'ProjectSphere · Capstone workspace',
-  description: 'A focused workspace for managing capstone projects, tasks, milestones, and faculty feedback.',
-  generator: 'v0.app',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://projectsphere.app'),
+  title: {
+    default: 'ProjectSphere · Modern Academic Project Management',
+    template: '%s · ProjectSphere',
+  },
+  description: 'A modern SaaS workspace for academic project tracking, team collaboration, milestone reviews, and progress analytics.',
+  applicationName: 'ProjectSphere',
+  keywords: [
+    'ProjectSphere',
+    'project management',
+    'academic projects',
+    'capstone workspace',
+    'student collaboration',
+    'faculty review',
+  ],
+  authors: [{ name: 'ProjectSphere Team' }],
+  creator: 'ProjectSphere',
   icons: {
     icon: [
       {
@@ -22,6 +36,12 @@ export const metadata: Metadata = {
       },
     ],
     apple: '/apple-icon.png',
+  },
+  openGraph: {
+    title: 'ProjectSphere · Modern Academic Project Management',
+    description: 'Transform your capstone and academic projects into structured progress with milestone tracking, faculty reviews, and team collaboration.',
+    siteName: 'ProjectSphere',
+    type: 'website',
   },
 }
 

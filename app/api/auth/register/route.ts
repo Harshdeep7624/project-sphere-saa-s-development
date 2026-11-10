@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
+import { recordAuditLog } from "@/lib/audit";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -15,6 +17,28 @@ const registerSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const clientIp = getClientIp(request);
+
+    // Rate limiting: max 10 account registrations per hour per IP
+    const ipRateLimit = await checkRateLimit(`register:ip:${clientIp}`, 10, 3600);
+    if (!ipRateLimit.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Too many registration attempts. Please try again in ${Math.ceil(ipRateLimit.retryAfter / 60)} minutes.`,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(ipRateLimit.retryAfter),
+            "X-RateLimit-Limit": String(ipRateLimit.limit),
+            "X-RateLimit-Remaining": String(ipRateLimit.remaining),
+            "X-RateLimit-Reset": String(ipRateLimit.reset),
+          },
+        }
+      );
+    }
+
     const body: unknown = await request.json();
     const parsed = registerSchema.safeParse(body);
 
@@ -53,7 +77,22 @@ export async function POST(request: Request) {
       email,
       password: hashedPassword,
       role: "student",
+      isActive: true,
     });
+
+    // Record server-side audit log
+    await recordAuditLog(
+      {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      "USER_REGISTERED",
+      "User",
+      user._id.toString(),
+      { role: user.role }
+    );
 
     return NextResponse.json(
       {
@@ -89,7 +128,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        message: "Unable to create account. Check the server terminal.",
+        message: "Unable to create account. Please try again later.",
       },
       { status: 500 }
     );

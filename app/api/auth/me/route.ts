@@ -1,28 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
-import { getCurrentUser } from "@/lib/auth";
+import { verifyUserSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   try {
-    const authUser = await getCurrentUser(request);
+    const { user: verifiedUser, error: authError } = await verifyUserSession(request);
 
-    if (!authUser) {
+    if (authError || !verifiedUser) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized. Please log in.",
+          message: authError?.message || "Unauthorized. Please log in.",
         },
-        { status: 401 }
+        { status: authError?.status || 401 }
       );
     }
 
     await connectDB();
 
-    const user = await User.findById(authUser.userId).select(
+    const user = await User.findById(verifiedUser.userId).select(
       "name email role createdAt"
     );
 

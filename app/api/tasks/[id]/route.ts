@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Task, { TaskCategory, TaskPriority, TaskStatus } from "@/models/Task";
-import { getCurrentUser } from "@/lib/auth";
+import Project from "@/models/Project";
+import { verifyUserSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -31,16 +32,17 @@ const updatableFields = [
   "priority",
   "status",
   "dueDate",
+  "projectId",
 ];
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const user = await getCurrentUser(request);
+    const { user, error: authError } = await verifyUserSession(request);
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json(
-        { success: false, message: "Please log in first." },
-        { status: 401 }
+        { success: false, message: authError?.message || "Please log in first." },
+        { status: authError?.status || 401 }
       );
     }
 
@@ -58,7 +60,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const task = await Task.findOne({
       _id: id,
       createdBy: user.userId,
-    }).lean();
+    })
+      .populate("projectId", "title category status")
+      .lean();
 
     if (!task) {
       return NextResponse.json(
@@ -68,6 +72,22 @@ export async function GET(request: NextRequest, context: RouteContext) {
         },
         { status: 404 }
       );
+    }
+
+    let formattedProject = null;
+    if (task.projectId && typeof task.projectId === "object" && "_id" in task.projectId) {
+      const proj = task.projectId as {
+        _id: { toString(): string };
+        title: string;
+        category?: string;
+        status?: string;
+      };
+      formattedProject = {
+        _id: proj._id.toString(),
+        title: proj.title,
+        category: proj.category,
+        status: proj.status,
+      };
     }
 
     return NextResponse.json({
@@ -81,6 +101,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         priority: task.priority,
         status: task.status,
         dueDate: task.dueDate instanceof Date ? task.dueDate.toISOString() : task.dueDate,
+        projectId: formattedProject,
         createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
         updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt,
       },
@@ -96,12 +117,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    const user = await getCurrentUser(request);
+    const { user, error: authError } = await verifyUserSession(request);
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json(
-        { success: false, message: "Please log in first." },
-        { status: 401 }
+        { success: false, message: authError?.message || "Please log in first." },
+        { status: authError?.status || 401 }
       );
     }
 
@@ -256,7 +277,41 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       updates.dueDate = parsedDueDate;
     }
 
+    if ("projectId" in payload) {
+      if (payload.projectId === null || payload.projectId === "") {
+        updates.projectId = null;
+      } else if (
+        typeof payload.projectId !== "string" ||
+        !mongoose.isValidObjectId(payload.projectId)
+      ) {
+        return NextResponse.json(
+          { success: false, message: "Invalid project ID format." },
+          { status: 400 }
+        );
+      } else {
+        updates.projectId = payload.projectId;
+      }
+    }
+
     await connectDB();
+
+    if (updates.projectId && typeof updates.projectId === "string") {
+      const project = await Project.findOne({
+        _id: updates.projectId,
+        createdBy: user.userId,
+      }).lean();
+
+      if (!project) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Project not found or you do not have permission to attach tasks to it.",
+          },
+          { status: 404 }
+        );
+      }
+      updates.projectId = new mongoose.Types.ObjectId(updates.projectId);
+    }
 
     const task = await Task.findOneAndUpdate(
       { _id: id, createdBy: user.userId },
@@ -265,7 +320,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         returnDocument: "after",
         runValidators: true,
       }
-    ).lean();
+    )
+      .populate("projectId", "title category status")
+      .lean();
 
     if (!task) {
       return NextResponse.json(
@@ -275,6 +332,22 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         },
         { status: 404 }
       );
+    }
+
+    let formattedProject = null;
+    if (task.projectId && typeof task.projectId === "object" && "_id" in task.projectId) {
+      const proj = task.projectId as {
+        _id: { toString(): string };
+        title: string;
+        category?: string;
+        status?: string;
+      };
+      formattedProject = {
+        _id: proj._id.toString(),
+        title: proj.title,
+        category: proj.category,
+        status: proj.status,
+      };
     }
 
     return NextResponse.json({
@@ -289,6 +362,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         priority: task.priority,
         status: task.status,
         dueDate: task.dueDate instanceof Date ? task.dueDate.toISOString() : task.dueDate,
+        projectId: formattedProject,
         createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
         updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt,
       },
@@ -304,12 +378,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
-    const user = await getCurrentUser(request);
+    const { user, error: authError } = await verifyUserSession(request);
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json(
-        { success: false, message: "Please log in first." },
-        { status: 401 }
+        { success: false, message: authError?.message || "Please log in first." },
+        { status: authError?.status || 401 }
       );
     }
 

@@ -7,6 +7,8 @@ export interface IUser {
   email: string;
   password: string;
   role: UserRole;
+  isActive?: boolean;
+  tokenVersion?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -40,6 +42,16 @@ const UserSchema = new Schema<IUser>(
       enum: ["student", "faculty", "admin"],
       default: "student",
       required: true,
+    },
+
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+
+    tokenVersion: {
+      type: Number,
+      default: 0,
     },
   },
   {

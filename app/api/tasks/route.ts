@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Task, { TaskCategory, TaskPriority, TaskStatus } from "@/models/Task";
-import { getCurrentUser } from "@/lib/auth";
+import Project from "@/models/Project";
+import { verifyUserSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -25,12 +27,12 @@ const allowedStatuses: TaskStatus[] = ["Pending", "In Progress", "Completed"];
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser(request);
+    const { user, error: authError } = await verifyUserSession(request);
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json(
-        { success: false, message: "Please log in first." },
-        { status: 401 }
+        { success: false, message: authError?.message || "Please log in first." },
+        { status: authError?.status || 401 }
       );
     }
 
@@ -130,6 +132,7 @@ export async function GET(request: NextRequest) {
     const [total, tasks, totalAll, inProgressCount, completedCount, dueSoonCount] = await Promise.all([
       Task.countDocuments(filterQuery),
       Task.find(filterQuery)
+        .populate("projectId", "title category status")
         .sort({ dueDate: 1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -146,18 +149,37 @@ export async function GET(request: NextRequest) {
 
     const totalPages = Math.ceil(total / limit);
 
-    const formattedTasks = tasks.map((task) => ({
-      _id: task._id.toString(),
-      id: task._id.toString(),
-      title: task.title,
-      description: task.description || "",
-      category: task.category,
-      priority: task.priority,
-      status: task.status,
-      dueDate: task.dueDate instanceof Date ? task.dueDate.toISOString() : task.dueDate,
-      createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
-      updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt,
-    }));
+    const formattedTasks = tasks.map((task) => {
+      let formattedProject = null;
+      if (task.projectId && typeof task.projectId === "object" && "_id" in task.projectId) {
+        const proj = task.projectId as {
+          _id: { toString(): string };
+          title: string;
+          category?: string;
+          status?: string;
+        };
+        formattedProject = {
+          _id: proj._id.toString(),
+          title: proj.title,
+          category: proj.category,
+          status: proj.status,
+        };
+      }
+
+      return {
+        _id: task._id.toString(),
+        id: task._id.toString(),
+        title: task.title,
+        description: task.description || "",
+        category: task.category,
+        priority: task.priority,
+        status: task.status,
+        dueDate: task.dueDate instanceof Date ? task.dueDate.toISOString() : task.dueDate,
+        projectId: formattedProject,
+        createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
+        updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt,
+      };
+    });
 
     return NextResponse.json({
       success: true,
@@ -192,12 +214,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser(request);
+    const { user, error: authError } = await verifyUserSession(request);
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json(
-        { success: false, message: "Please log in first." },
-        { status: 401 }
+        { success: false, message: authError?.message || "Please log in first." },
+        { status: authError?.status || 401 }
       );
     }
 
@@ -225,7 +247,20 @@ export async function POST(request: NextRequest) {
       priority = "Medium",
       status = "Pending",
       dueDate,
+      projectId,
     } = body as Record<string, unknown>;
+
+    // Validate optional projectId format before DB call
+    let targetProjectId: string | null = null;
+    if (projectId !== undefined && projectId !== null && projectId !== "") {
+      if (typeof projectId !== "string" || !mongoose.isValidObjectId(projectId)) {
+        return NextResponse.json(
+          { success: false, message: "Invalid project ID format." },
+          { status: 400 }
+        );
+      }
+      targetProjectId = projectId;
+    }
 
     // 1. Validate title
     if (
@@ -326,6 +361,39 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
+    let validatedProjectId: mongoose.Types.ObjectId | null = null;
+    let associatedProject: {
+      _id: string;
+      title: string;
+      category?: string;
+      status?: string;
+    } | null = null;
+
+    if (targetProjectId) {
+      const project = await Project.findOne({
+        _id: targetProjectId,
+        createdBy: user.userId,
+      }).lean();
+
+      if (!project) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Project not found or you do not have permission to attach tasks to it.",
+          },
+          { status: 404 }
+        );
+      }
+
+      validatedProjectId = new mongoose.Types.ObjectId(targetProjectId);
+      associatedProject = {
+        _id: project._id.toString(),
+        title: project.title,
+        category: project.category,
+        status: project.status,
+      };
+    }
+
     // 7. Save task strictly bound to authenticated user
     const task = await Task.create({
       title: title.trim(),
@@ -334,6 +402,7 @@ export async function POST(request: NextRequest) {
       priority: priority as TaskPriority,
       status: status as TaskStatus,
       dueDate: parsedDueDate,
+      projectId: validatedProjectId,
       createdBy: user.userId,
     });
 
@@ -350,6 +419,7 @@ export async function POST(request: NextRequest) {
           priority: task.priority,
           status: task.status,
           dueDate: task.dueDate.toISOString(),
+          projectId: associatedProject,
           createdAt: task.createdAt?.toISOString(),
           updatedAt: task.updatedAt?.toISOString(),
         },
