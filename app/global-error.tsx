@@ -60,11 +60,12 @@ export default function GlobalError({
 
           <h1
             style={{
-              fontSize: "22px",
-              fontWeight: 800,
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: "24px",
+              fontWeight: 700,
               margin: "0 0 10px",
               color: "#ffffff",
-              letterSpacing: "-0.02em",
+              letterSpacing: "-0.01em",
             }}
           >
             System Recovery Mode

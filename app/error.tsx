@@ -70,11 +70,12 @@ export default function ErrorBoundary({
 
         <h1
           style={{
-            fontSize: "22px",
-            fontWeight: 800,
+            fontFamily: "var(--font-serif)",
+            fontSize: "24px",
+            fontWeight: 700,
             margin: "0 0 10px",
             color: "var(--foreground)",
-            letterSpacing: "-0.02em",
+            letterSpacing: "-0.01em",
           }}
         >
           Something went wrong

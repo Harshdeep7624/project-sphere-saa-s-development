@@ -33,8 +33,9 @@ export default function NotFound() {
             width: 56,
             height: 56,
             borderRadius: "14px",
-            background: "rgba(37, 99, 235, 0.08)",
-            color: "var(--primary)",
+            background: "var(--accent-gold-light)",
+            color: "var(--accent-gold)",
+            border: "1px solid var(--accent-gold-border)",
             marginBottom: 20,
           }}
         >
@@ -43,11 +44,11 @@ export default function NotFound() {
 
         <div
           style={{
-            fontSize: "12px",
+            fontSize: "11px",
             fontWeight: 700,
             letterSpacing: "0.08em",
             textTransform: "uppercase",
-            color: "var(--primary)",
+            color: "var(--accent-gold)",
             marginBottom: 8,
           }}
         >
@@ -56,11 +57,12 @@ export default function NotFound() {
 
         <h1
           style={{
-            fontSize: "24px",
-            fontWeight: 800,
+            fontFamily: "var(--font-serif)",
+            fontSize: "26px",
+            fontWeight: 700,
             margin: "0 0 10px",
             color: "var(--foreground)",
-            letterSpacing: "-0.02em",
+            letterSpacing: "-0.01em",
           }}
         >
           Lost in Orbit?
@@ -93,11 +95,13 @@ export default function NotFound() {
               gap: "8px",
               padding: "10px 18px",
               background: "var(--primary)",
-              color: "#ffffff",
+              color: "#faf9f6",
+              border: "1px solid rgba(184, 144, 71, 0.35)",
               borderRadius: "8px",
               fontWeight: 600,
               fontSize: "14px",
               textDecoration: "none",
+              boxShadow: "0 4px 14px rgba(15, 23, 42, 0.12)",
             }}
           >
             <Home size={16} />

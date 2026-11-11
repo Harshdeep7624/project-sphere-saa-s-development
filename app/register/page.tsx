@@ -120,9 +120,9 @@ export default function RegisterPage() {
               textTransform: "uppercase",
               padding: "3px 8px",
               borderRadius: 20,
-              background: "rgba(165, 180, 252, 0.15)",
-              color: "#c7d2fe",
-              border: "1px solid rgba(165, 180, 252, 0.25)",
+              background: "rgba(184, 144, 71, 0.15)",
+              color: "#dfc89a",
+              border: "1px solid rgba(184, 144, 71, 0.3)",
               marginLeft: 6,
             }}
           >
@@ -141,19 +141,19 @@ export default function RegisterPage() {
           <div className="auth-glass-cards">
             {/* Illustrative preview disclosure */}
             <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 600, color: "#cbd5e1", background: "rgba(255, 255, 255, 0.08)", padding: "4px 10px", borderRadius: 20, width: "fit-content", border: "1px solid rgba(255, 255, 255, 0.12)" }}>
-              <Sparkles size={12} style={{ color: "#a5b4fc" }} /> Platform Preview (Illustrative Showcase)
+              <Sparkles size={12} style={{ color: "var(--accent-gold)" }} /> Platform Preview (Illustrative Showcase)
             </div>
 
             {/* Showcase Card 1 */}
             <div className="auth-glass-card">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(99, 102, 241, 0.25)", color: "#a5b4fc", display: "grid", placeItems: "center" }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(184, 144, 71, 0.2)", color: "#dfc89a", display: "grid", placeItems: "center" }}>
                     <FolderKanban size={15} />
                   </div>
                   <strong style={{ fontSize: 13, color: "#f8fafc" }}>Distributed Systems Platform</strong>
                 </div>
-                <span style={{ fontSize: 10, fontWeight: 700, color: "#818cf8", background: "rgba(129, 140, 248, 0.15)", padding: "2px 8px", borderRadius: 12 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#dfc89a", background: "rgba(184, 144, 71, 0.15)", padding: "2px 8px", borderRadius: 12 }}>
                   In Progress
                 </span>
               </div>
@@ -162,7 +162,7 @@ export default function RegisterPage() {
                 <span style={{ color: "#e2e8f0", fontWeight: 600 }}>75%</span>
               </div>
               <div style={{ height: 5, width: "100%", borderRadius: 4, background: "rgba(255, 255, 255, 0.1)", overflow: "hidden" }}>
-                <div style={{ width: "75%", height: "100%", background: "linear-gradient(90deg, #6657d9, #38bdf8)", borderRadius: 4 }} />
+                <div style={{ width: "75%", height: "100%", background: "linear-gradient(90deg, #b89047, #e6c887)", borderRadius: 4 }} />
               </div>
             </div>
 
@@ -206,13 +206,13 @@ export default function RegisterPage() {
                 <Sparkles size={17} />
               </div>
               <span style={{ fontSize: 20, fontWeight: 800, color: "#1e293b", letterSpacing: "-0.5px" }}>
-                Project<span style={{ color: "#6657d9" }}>Sphere</span>
+                Project<span style={{ color: "var(--accent-gold)" }}>Sphere</span>
               </span>
             </Link>
           </div>
 
           <div style={{ marginBottom: 22 }}>
-            <h2 style={{ fontSize: 26, fontWeight: 800, color: "#0f172a", margin: "0 0 8px", letterSpacing: "-0.6px" }}>
+            <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 28, fontWeight: 700, color: "#0f172a", margin: "0 0 8px", letterSpacing: "-0.01em" }}>
               Create your account
             </h2>
             <p style={{ fontSize: 14, color: "#64748b", margin: 0, lineHeight: 1.5 }}>
